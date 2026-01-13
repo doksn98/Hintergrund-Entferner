@@ -58,7 +58,6 @@
     </div>
 
     <script>
-        // API Key wird hier nicht mehr benötigt, da er sicher im Backend liegt
         const fileInput = document.getElementById('fileInput');
         const imagePreview = document.getElementById('imagePreview');
         const placeholderText = document.getElementById('placeholderText');
@@ -72,14 +71,14 @@
         const downloadLink = document.getElementById('downloadLink');
 
         let currentBase64 = null;
-        let mimeType = null;
 
+        // Datei auswählen und anzeigen
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                mimeType = file.type;
                 const reader = new FileReader();
                 reader.onload = (event) => {
+                    // Speichere das rohe Base64 (ohne data:image/... prefix)
                     currentBase64 = event.target.result.split(',')[1];
                     imagePreview.src = event.target.result;
                     imagePreview.classList.remove('hidden');
@@ -92,7 +91,8 @@
             }
         });
 
-        async function removeBackground() {
+        // Klick auf "Hintergrund entfernen"
+        processBtn.addEventListener('click', async () => {
             if (!currentBase64) return;
 
             processBtn.disabled = true;
@@ -100,69 +100,42 @@
             btnText.textContent = "Verarbeite...";
             errorMsg.classList.add('hidden');
 
-            const payload = {
-                contents: [
-                    {
-                        parts: [
-                            { text: "Entferne den Hintergrund dieses Bildes und mache ihn transparent." },
-                            { inlineData: { mimeType: mimeType, data: currentBase64 } }
-                        ]
-                    }
-                ],
-                generationConfig: {
-                    responseModalities: ["TEXT", "IMAGE"]
+            try {
+                // Sende das Bild an unseren eigenen Server (api/proxy.js)
+                const response = await fetch('/api/proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: currentBase64 })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `HTTP-Fehler: ${response.status}`);
                 }
-            };
 
-            let retries = 0;
-            const maxRetries = 5;
-
-            async function makeRequest() {
-                try {
-                    // HIER IST DIE ÄNDERUNG: Aufruf des eigenen Proxy-Servers
-                    const response = await fetch('/api/proxy', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        if (response.status === 429 && retries < maxRetries) {
-                            const waitTime = Math.pow(2, retries) * 1000;
-                            retries++;
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
-                            return makeRequest();
-                        }
-                        throw new Error(`HTTP-Fehler: ${response.status}`);
-                    }
-
-                    const result = await response.json();
-                    const imagePart = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                    
-                    if (imagePart && imagePart.inlineData.data) {
-                        const resultBase64 = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-                        resultImage.src = resultBase64;
-                        downloadLink.href = resultBase64;
-                        resultSection.classList.remove('hidden');
-                        resultSection.scrollIntoView({ behavior: 'smooth' });
-                    } else {
-                        throw new Error("Kein Bild im Ergebnis gefunden.");
-                    }
-
-                } catch (error) {
-                    errorMsg.classList.remove('hidden');
-                    errorText.textContent = "Ein Fehler ist aufgetreten: " + error.message;
-                } finally {
-                    processBtn.disabled = false;
-                    spinner.classList.add('hidden');
-                    btnText.textContent = "Hintergrund entfernen";
+                const result = await response.json();
+                
+                // Das Ergebnis von remove.bg anzeigen
+                if (result.image) {
+                    const resultBase64 = `data:image/png;base64,${result.image}`;
+                    resultImage.src = resultBase64;
+                    downloadLink.href = resultBase64;
+                    resultSection.classList.remove('hidden');
+                    resultSection.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    throw new Error("Keine Bilddaten erhalten.");
                 }
+
+            } catch (error) {
+                console.error(error);
+                errorMsg.classList.remove('hidden');
+                errorText.textContent = "Ein Fehler ist aufgetreten: " + error.message;
+            } finally {
+                processBtn.disabled = false;
+                spinner.classList.add('hidden');
+                btnText.textContent = "Hintergrund entfernen";
             }
-
-            await makeRequest();
-        }
-
-        processBtn.addEventListener('click', removeBackground);
+        });
     </script>
 </body>
 </html>
