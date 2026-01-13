@@ -4,7 +4,7 @@ export default async function handler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY; // Schlüssel sicher vom Server holen
     
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-image-preview:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(req.body)
@@ -16,3 +16,4 @@ export default async function handler(req, res) {
         res.status(500).json({ error: error.message });
     }
 }
+
